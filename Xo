@@ -1,0 +1,1206 @@
+```html:Backrooms Custom Flashlight:index.html
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full w-full overflow-hidden select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Backrooms: Level 0 - Scaled Flashlight Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Three.js OBJLoader Extension -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+        
+        * {
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #000;
+        }
+
+        .font-vhs {
+            font-family: 'VT323', monospace;
+        }
+
+        /* Efeito de linhas VHS estéticas estilo Backrooms */
+        .vhs-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* Botões Virtuais Touches */
+        .touch-btn {
+            background: rgba(20, 20, 15, 0.85);
+            border: 2px solid rgba(234, 179, 8, 0.6);
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            transition: transform 0.05s ease, background-color 0.1s ease;
+        }
+
+        .touch-btn:active, .touch-btn.btn-active {
+            transform: scale(0.88);
+            background: rgba(234, 179, 8, 0.6);
+            border-color: rgba(254, 240, 138, 1);
+        }
+
+        .joystick-base {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2.5px solid rgba(234, 179, 8, 0.5);
+            border-radius: 50%;
+            backdrop-filter: blur(4px);
+        }
+        
+        .joystick-thumb {
+            background: rgba(234, 179, 8, 0.95);
+            border-radius: 50%;
+            box-shadow: 0 0 14px rgba(234, 179, 8, 0.8);
+        }
+
+        /* Alerta de Perseguição */
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: inset 0 0 25px rgba(255, 0, 0, 0); }
+            50% { box-shadow: inset 0 0 140px rgba(255, 0, 0, 0.9); }
+        }
+        .chase-alert {
+            animation: pulse-red 0.6s infinite;
+        }
+    </style>
+</head>
+<body class="bg-black text-white h-full w-full overflow-hidden select-none">
+
+    <!-- Renderizador 3D -->
+    <div id="game-container" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- Filtro Estético VHS -->
+    <div class="vhs-overlay absolute inset-0 z-10 opacity-80"></div>
+
+    <!-- Tela de Alerta Vermelho quando o Monstro Persegue -->
+    <div id="chase-overlay" class="absolute inset-0 z-10 transition-opacity duration-300 opacity-0 pointer-events-none chase-alert"></div>
+
+    <!-- Crosshair Central -->
+    <div id="crosshair" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+        <div class="w-1.5 h-1.5 bg-yellow-400/90 rounded-full shadow-[0_0_8px_rgba(234,179,8,0.9)]"></div>
+    </div>
+
+    <!-- Prompt de Interação com Portas -->
+    <div id="interaction-prompt" class="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-10 z-20 pointer-events-none opacity-0 transition-opacity duration-200 bg-black/85 border border-yellow-500/60 px-4 py-1.5 rounded-md text-xs text-yellow-300 font-mono shadow-xl">
+        [E] / TOQUE PARA ABRIR/FECHAR PORTA
+    </div>
+
+    <!-- HUD REORGANIZADO NO TOPO E ELEGANTE -->
+    <div id="hud" class="absolute inset-0 z-20 pointer-events-none flex flex-col justify-between p-3 md:p-5">
+        <!-- BARRA SUPERIOR COMPLETA (Relógio VHS + Status de Barras Limpas) -->
+        <div class="w-full grid grid-cols-1 md:grid-cols-3 gap-3 items-center bg-black/70 backdrop-blur-md p-3 rounded-2xl border border-yellow-500/30">
+            <!-- Bloco VHS Esquerdo -->
+            <div class="flex items-center space-x-3 font-vhs text-yellow-500/90 text-xl tracking-widest drop-shadow">
+                <span class="inline-block w-3 h-3 rounded-full bg-red-600 animate-pulse"></span>
+                <span>REC ●</span>
+                <span id="vhs-timer" class="text-white font-mono text-sm ml-2">00:00:00</span>
+                <span class="text-xs text-yellow-600/80 hidden sm:inline">| LVL 0</span>
+            </div>
+
+            <!-- Bloco de Barras Centralizado (Estamina & Bateria) -->
+            <div class="space-y-1.5 max-w-md w-full mx-auto">
+                <!-- Estamina -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-[10px] text-yellow-300 font-mono font-bold w-16 text-right">ESTÂMINA</span>
+                    <div class="flex-1 h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-700">
+                        <div id="stamina-bar" class="h-full bg-gradient-to-r from-amber-600 to-yellow-400 transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                    <span id="stamina-text" class="text-[10px] text-yellow-200 font-mono w-8">100%</span>
+                </div>
+
+                <!-- Bateria da Lanterna -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-[10px] text-cyan-300 font-mono font-bold w-16 text-right">BATERIA</span>
+                    <div class="flex-1 h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-700">
+                        <div id="battery-bar" class="h-full bg-gradient-to-r from-cyan-600 to-teal-300 transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                    <span id="battery-text" class="text-[10px] text-cyan-200 font-mono w-8">100%</span>
+                </div>
+            </div>
+
+            <!-- Bloco de Pausa Direito -->
+            <div class="flex justify-end items-center">
+                <button id="btn-pause" onclick="togglePauseMenu()" class="pointer-events-auto bg-black/80 hover:bg-yellow-900/40 border border-yellow-500/40 px-3 py-1.5 rounded-xl text-yellow-400 backdrop-blur active:scale-95 transition text-xs font-mono">
+                    ⚙️ PAUSA
+                </button>
+            </div>
+        </div>
+
+        <!-- Alerta de Entidade -->
+        <div id="monster-status" class="self-center font-vhs text-red-500 text-3xl tracking-widest opacity-0 transition-opacity duration-300 drop-shadow-[0_0_12px_rgba(255,0,0,1)]">
+            ⚠️ ENTIDADE TE VIU! CORRA!
+        </div>
+
+        <!-- Espaço Livre Inferior -->
+        <div class="h-4"></div>
+    </div>
+
+    <!-- Painel de Controles Touch Mobile Aumentados -->
+    <div id="mobile-controls" class="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between p-3 md:p-6">
+        <div class="flex justify-between items-end w-full mt-auto pb-1">
+            <!-- Joystick Virtual -->
+            <div id="joystick-zone" class="w-36 h-36 joystick-base relative pointer-events-auto flex items-center justify-center">
+                <div id="joystick-thumb" class="w-14 h-14 joystick-thumb absolute pointer-events-none"></div>
+            </div>
+
+            <!-- Grade de Botões Virtuais AUMENTADOS -->
+            <div class="grid grid-cols-3 gap-3 pointer-events-auto">
+                <button id="btn-crouch" class="w-16 h-16 touch-btn rounded-2xl flex items-center justify-center text-xs font-extrabold text-yellow-400">
+                    AGACH
+                </button>
+
+                <button id="btn-jump" class="w-16 h-16 touch-btn rounded-2xl flex items-center justify-center text-xs font-extrabold text-yellow-400">
+                    PULAR
+                </button>
+
+                <button id="btn-flashlight" class="w-16 h-16 touch-btn rounded-2xl flex items-center justify-center text-xs font-extrabold text-yellow-300">
+                    LUZ 🔦
+                </button>
+
+                <button id="btn-sprint" class="w-16 h-16 col-span-2 touch-btn rounded-2xl flex items-center justify-center text-sm font-extrabold text-amber-300">
+                    CORRER ⚡
+                </button>
+
+                <button id="btn-interact" class="w-16 h-16 touch-btn rounded-2xl flex items-center justify-center text-xs font-extrabold text-yellow-200">
+                    ABRIR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Menu Principal -->
+    <div id="main-menu" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
+        <div class="max-w-md w-full bg-zinc-950 border border-yellow-500/40 rounded-2xl p-6 text-center space-y-5 shadow-2xl">
+            <div>
+                <h1 class="font-vhs text-5xl text-yellow-500 tracking-wider drop-shadow-lg">THE BACKROOMS</h1>
+                <p class="text-xs text-yellow-200/60 font-mono mt-1">Level 0 - O Labirinto Amarelo Sem Fim</p>
+            </div>
+
+            <p class="text-xs text-gray-300 leading-relaxed font-mono">
+                Você caiu na dimensão dos Backrooms. Abra portas, gerencie sua lanterna e fuja da entidade antes que seja tarde.
+            </p>
+
+            <div class="bg-black/60 border border-zinc-800 p-3 rounded-xl text-left text-xs font-mono space-y-1 text-gray-300">
+                <div class="text-yellow-400 font-bold mb-1">🎮 CONTROLES:</div>
+                <div>• <b>Joystick / WASD:</b> Mover-se</div>
+                <div>• <b>Arraste Lado Direito:</b> Olhar Câmera</div>
+                <div>• <b>LUZ 🔦 / F:</b> Ligar/Desligar Lanterna</div>
+                <div>• <b>CORRER ⚡ / SHIFT:</b> Correr</div>
+                <div>• <b>ABRIR / E:</b> Interagir com Portas</div>
+            </div>
+
+            <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-yellow-600 to-amber-500 hover:from-yellow-500 hover:to-amber-400 text-black font-extrabold rounded-xl shadow-xl transition transform active:scale-95 text-base font-mono">
+                ENTRAR NOS BACKROOMS
+            </button>
+        </div>
+    </div>
+
+
+<!-- Menu de Pausa & Configurações -->
+    <div id="pause-menu" class="absolute inset-0 z-50 hidden flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+        <div class="max-w-md w-full bg-zinc-950 border border-yellow-500/40 rounded-2xl p-6 space-y-4 shadow-2xl font-mono">
+            <h2 class="font-vhs text-4xl text-yellow-400 text-center tracking-wider">CONFIGURAÇÕES</h2>
+
+            <div class="space-y-4 text-xs">
+                <!-- Qualidade Gráfica -->
+                <div>
+                    <label class="block text-gray-300 font-medium mb-1.5">Preset Gráfico:</label>
+                    <div class="grid grid-cols-5 gap-1">
+                        <button onclick="setGraphicsQuality('potato')" class="gfx-btn py-1.5 rounded border border-zinc-700 bg-zinc-900 hover:bg-yellow-600/30">Potato</button>
+                        <button onclick="setGraphicsQuality('low')" class="gfx-btn py-1.5 rounded border border-zinc-700 bg-zinc-900 hover:bg-yellow-600/30">Baixo</button>
+                        <button onclick="setGraphicsQuality('medium')" class="gfx-btn py-1.5 rounded border border-yellow-500 bg-yellow-500/20 text-yellow-300 font-bold">Médio</button>
+                        <button onclick="setGraphicsQuality('high')" class="gfx-btn py-1.5 rounded border border-zinc-700 bg-zinc-900 hover:bg-yellow-600/30">Alto</button>
+                        <button onclick="setGraphicsQuality('ultra')" class="gfx-btn py-1.5 rounded border border-zinc-700 bg-zinc-900 hover:bg-yellow-600/30">Ultra</button>
+                    </div>
+                </div>
+
+                <!-- Sensibilidade -->
+                <div>
+                    <div class="flex justify-between text-gray-300 mb-1">
+                        <span>Sensibilidade Câmera:</span>
+                        <span id="sens-val" class="text-yellow-400">1.0</span>
+                    </div>
+                    <input type="range" id="sensitivity-slider" min="0.2" max="3.0" step="0.1" value="1.0" oninput="updateSensitivity(this.value)" class="w-full accent-yellow-500 bg-zinc-800 rounded">
+                </div>
+
+                <!-- FOV -->
+                <div>
+                    <div class="flex justify-between text-gray-300 mb-1">
+                        <span>Campo de Visão (FOV):</span>
+                        <span id="fov-val" class="text-yellow-400">75</span>
+                    </div>
+                    <input type="range" id="fov-slider" min="60" max="100" step="1" value="75" oninput="updateFOV(this.value)" class="w-full accent-yellow-500 bg-zinc-800 rounded">
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-2">
+                <button onclick="togglePauseMenu()" class="w-full py-3 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition active:scale-95 text-sm">
+                    VOLTAR AO JOGO
+                </button>
+                <button onclick="location.reload()" class="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-gray-300 rounded-xl transition text-xs border border-zinc-800">
+                    REINICIAR NÍVEL
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Morte -->
+    <div id="game-over-menu" class="absolute inset-0 z-50 hidden flex flex-col items-center justify-center bg-red-950/95 backdrop-blur-xl p-4 text-center font-mono">
+        <h1 class="font-vhs text-6xl text-red-500 tracking-widest mb-2 animate-pulse">VOCÊ FOI PEGO!</h1>
+        <p class="text-gray-300 max-w-sm mb-6 text-xs">A entidade alcançou você nos Backrooms...</p>
+        <button onclick="location.reload()" class="py-3.5 px-8 bg-red-600 hover:bg-red-500 text-white font-extrabold rounded-xl shadow-xl transition active:scale-95 text-sm">
+            TENTAR NOVAMENTE
+        </button>
+    </div>
+
+    <!-- CÓDIGO ENGINE DO JOGO -->
+    <script>
+        /* --- ESTADO E CONFIGURAÇÃO --- */
+        let scene, camera, renderer;
+        let isGameStarted = false;
+        let isPaused = false;
+        let gameStartTime = 0;
+        
+        const settings = {
+            fov: 75,
+            sensitivity: 1.0,
+            quality: 'medium',
+            pixelRatio: 0.85
+        };
+
+        const keys = { forward: false, backward: false, left: false, right: false, sprint: false, crouch: false, jump: false };
+        const joystick = { active: false, x: 0, y: 0 };
+        const touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
+
+        // Física do Jogador
+        const player = {
+            height: 1.65,
+            crouchHeight: 0.95,
+            currentHeight: 1.65,
+            radius: 0.35,
+            position: new THREE.Vector3(0, 1.65, 0),
+            velocity: new THREE.Vector3(),
+            pitch: 0,
+            yaw: 0,
+            isGrounded: true,
+            stamina: 100,
+            maxStamina: 100,
+            isExhausted: false,
+            battery: 100,
+            flashlightOn: true,
+            isCrouching: false,
+            isSprinting: false
+        };
+
+        // Grade do Labirinto e Física de Colisões
+        const GRID_SIZE = 22;
+        const CELL_SIZE = 4;
+        const WALL_HEIGHT = 3.2;
+        let mazeGrid = [];
+        let doors = [];
+        let collisionBoxes = [];
+
+        // Iluminação e Monstro
+        let flashlightSpotlight, flashlightPointlight, flashlightModel, flashlightTarget;
+        let monster;
+        let audioCtx, chaseSoundGain;
+
+        /* --- TEXTURAS PROCEDURAIS --- */
+        function createYellowWallpaperTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#bfa855';
+            ctx.fillRect(0, 0, 256, 256);
+
+            ctx.fillStyle = '#a89244';
+            for (let x = 0; x < 256; x += 16) ctx.fillRect(x, 0, 8, 256);
+
+            ctx.strokeStyle = '#8a7736';
+            ctx.lineWidth = 1;
+            for (let y = 0; y < 256; y += 32) {
+                for (let x = 0; x < 256; x += 32) {
+                    ctx.strokeRect(x + 4, y + 4, 24, 24);
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createCarpetTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#5c522c';
+            ctx.fillRect(0, 0, 256, 256);
+
+            ctx.fillStyle = 'rgba(30, 25, 10, 0.35)';
+            for (let i = 0; i < 10; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random()*256, Math.random()*256, 15 + Math.random()*25, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createCeilingTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#a3a093';
+            ctx.fillRect(0, 0, 128, 128);
+
+            ctx.strokeStyle = '#44423b';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(0, 0, 128, 128);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        /* --- CONFIGURAÇÃO THREE.JS --- */
+        function initThree() {
+            const container = document.getElementById('game-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a05);
+            scene.fog = new THREE.FogExp2(0x0a0a05, 0.08);
+
+            camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 40);
+            camera.rotation.order = 'YXZ';
+            scene.add(camera);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(settings.pixelRatio);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 0.85;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0x666644, 0.5);
+            scene.add(ambientLight);
+
+            buildOptimizedMaze();
+            setupFlashlight();
+            setupMonster();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        /* --- CONSTRUÇÃO DO LABIRINTO E CAIXAS DE COLISÃO RÍGIDAS --- */
+        function buildOptimizedMaze() {
+            collisionBoxes = [];
+
+            const wallTex = createYellowWallpaperTexture();
+            const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.8 });
+
+            const carpetTex = createCarpetTexture();
+            carpetTex.repeat.set(GRID_SIZE, GRID_SIZE);
+            const floorMat = new THREE.MeshStandardMaterial({ map: carpetTex, roughness: 0.9 });
+
+            const ceilingTex = createCeilingTexture();
+            ceilingTex.repeat.set(GRID_SIZE / 2, GRID_SIZE / 2);
+            const ceilingMat = new THREE.MeshStandardMaterial({ map: ceilingTex, roughness: 0.7 });
+
+            const planeGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+            
+            const floor = new THREE.Mesh(planeGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            const ceiling = new THREE.Mesh(planeGeo, ceilingMat);
+            ceiling.position.y = WALL_HEIGHT;
+            ceiling.rotation.x = Math.PI / 2;
+            scene.add(ceiling);
+
+            mazeGrid = Array(GRID_SIZE).fill(0).map(() => Array(GRID_SIZE).fill(0));
+
+            // Paredes externas
+            for (let i = 0; i < GRID_SIZE; i++) {
+                mazeGrid[0][i] = 1;
+                mazeGrid[GRID_SIZE - 1][i] = 1;
+                mazeGrid[i][0] = 1;
+                mazeGrid[i][GRID_SIZE - 1] = 1;
+            }
+
+            // Salas e corredores
+            for (let r = 2; r < GRID_SIZE - 2; r += 2) {
+                for (let c = 2; c < GRID_SIZE - 2; c += 2) {
+                    if (Math.random() > 0.35) {
+                        mazeGrid[r][c] = 1;
+                        const dir = Math.floor(Math.random() * 4);
+                        if (dir === 0 && r + 1 < GRID_SIZE - 1) mazeGrid[r + 1][c] = 1;
+                        else if (dir === 1 && c + 1 < GRID_SIZE - 1) mazeGrid[r][c + 1] = 1;
+                    }
+                }
+            }
+
+            // Área do jogador no centro
+            const startX = Math.floor(GRID_SIZE / 2);
+            const startZ = Math.floor(GRID_SIZE / 2);
+            mazeGrid[startX][startZ] = 0;
+            mazeGrid[startX + 1][startZ] = 0;
+            mazeGrid[startX - 1][startZ] = 0;
+            mazeGrid[startX][startZ + 1] = 0;
+            mazeGrid[startX][startZ - 1] = 0;
+
+            player.position.set((startX - GRID_SIZE / 2) * CELL_SIZE, player.height, (startZ - GRID_SIZE / 2) * CELL_SIZE);
+            camera.position.copy(player.position);
+
+            const wallGeo = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
+            const wallInstanced = new THREE.InstancedMesh(wallGeo, wallMat, GRID_SIZE * GRID_SIZE);
+            
+            let instanceIdx = 0;
+            const dummy = new THREE.Object3D();
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const posX = (r - GRID_SIZE / 2) * CELL_SIZE;
+                    const posZ = (c - GRID_SIZE / 2) * CELL_SIZE;
+
+                    if (mazeGrid[r][c] === 1) {
+                        dummy.position.set(posX, WALL_HEIGHT / 2, posZ);
+                        dummy.updateMatrix();
+                        wallInstanced.setMatrixAt(instanceIdx++, dummy.matrix);
+
+                        // REGISTRA AABB DE PAREDE PARA COLISÃO FÍSICA
+                        collisionBoxes.push(new THREE.Box3(
+                            new THREE.Vector3(posX - CELL_SIZE / 2, 0, posZ - CELL_SIZE / 2),
+                            new THREE.Vector3(posX + CELL_SIZE / 2, WALL_HEIGHT, posZ + CELL_SIZE / 2)
+                        ));
+                    } else if (r > 2 && r < GRID_SIZE - 2 && c > 2 && c < GRID_SIZE - 2) {
+                        const hasNorth = mazeGrid[r - 1][c] === 1;
+                        const hasSouth = mazeGrid[r + 1][c] === 1;
+                        const hasWest = mazeGrid[r][c - 1] === 1;
+                        const hasEast = mazeGrid[r][c + 1] === 1;
+
+                        if (((hasNorth && hasSouth && !hasWest && !hasEast) || (hasWest && hasEast && !hasNorth && !hasSouth)) && Math.random() < 0.3) {
+                            const isHorizontal = hasWest && hasEast;
+                            createRoomDoor(posX, posZ, isHorizontal, wallMat);
+                        }
+                    }
+                }
+            }
+
+            wallInstanced.count = instanceIdx;
+            wallInstanced.instanceMatrix.needsUpdate = true;
+            scene.add(wallInstanced);
+        }
+
+        /* --- PORTA COM COLISÃO DINÂMICA --- */
+        function createRoomDoor(x, z, isHorizontal, wallMat) {
+            const doorGroup = new THREE.Group();
+            doorGroup.position.set(x, 0, z);
+
+            if (isHorizontal) {
+                doorGroup.rotation.y = Math.PI / 2;
+            }
+
+            const sideWidth = (CELL_SIZE - 1.8) / 2;
+            const sideWallGeo = new THREE.BoxGeometry(sideWidth, WALL_HEIGHT, 0.4);
+            
+            const leftFrameWall = new THREE.Mesh(sideWallGeo, wallMat);
+            const leftX = -(CELL_SIZE / 2) + (sideWidth / 2);
+            leftFrameWall.position.set(leftX, WALL_HEIGHT / 2, 0);
+            
+            const rightFrameWall = new THREE.Mesh(sideWallGeo, wallMat);
+            const rightX = (CELL_SIZE / 2) - (sideWidth / 2);
+            rightFrameWall.position.set(rightX, WALL_HEIGHT / 2, 0);
+
+            const topHeaderGeo = new THREE.BoxGeometry(1.8, WALL_HEIGHT - 2.3, 0.4);
+            const topHeaderWall = new THREE.Mesh(topHeaderGeo, wallMat);
+            topHeaderWall.position.set(0, WALL_HEIGHT - ((WALL_HEIGHT - 2.3) / 2), 0);
+
+            doorGroup.add(leftFrameWall, rightFrameWall, topHeaderWall);
+
+            if (isHorizontal) {
+                collisionBoxes.push(new THREE.Box3(new THREE.Vector3(x - 0.2, 0, z + leftX - sideWidth/2), new THREE.Vector3(x + 0.2, WALL_HEIGHT, z + leftX + sideWidth/2)));
+                collisionBoxes.push(new THREE.Box3(new THREE.Vector3(x - 0.2, 0, z + rightX - sideWidth/2), new THREE.Vector3(x + 0.2, WALL_HEIGHT, z + rightX + sideWidth/2)));
+            } else {
+                collisionBoxes.push(new THREE.Box3(new THREE.Vector3(x + leftX - sideWidth/2, 0, z - 0.2), new THREE.Vector3(x + leftX + sideWidth/2, WALL_HEIGHT, z + 0.2)));
+                collisionBoxes.push(new THREE.Box3(new THREE.Vector3(x + rightX - sideWidth/2, 0, z - 0.2), new THREE.Vector3(x + rightX + sideWidth/2, WALL_HEIGHT, z + 0.2)));
+            }
+
+            const hingeGroup = new THREE.Group();
+            hingeGroup.position.set(-0.9, 0, 0);
+
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3d1f, roughness: 0.8 });
+            const panelGeo = new THREE.BoxGeometry(1.8, 2.3, 0.12);
+            const panel = new THREE.Mesh(panelGeo, doorMat);
+            panel.position.set(0.9, 1.15, 0);
+            hingeGroup.add(panel);
+
+            doorGroup.add(hingeGroup);
+            scene.add(doorGroup);
+
+            let doorBox;
+            if (isHorizontal) {
+                doorBox = new THREE.Box3(new THREE.Vector3(x - 0.15, 0, z - 0.9), new THREE.Vector3(x + 0.15, WALL_HEIGHT, z + 0.9));
+            } else {
+                doorBox = new THREE.Box3(new THREE.Vector3(x - 0.9, 0, z - 0.15), new THREE.Vector3(x + 0.9, WALL_HEIGHT, z + 0.15));
+            }
+
+            doors.push({
+                group: doorGroup,
+                hinge: hingeGroup,
+                isOpen: false,
+                position: new THREE.Vector3(x, 0, z),
+                targetRot: 0,
+                currentRot: 0,
+                box: doorBox
+            });
+        }
+
+        /* --- CARREGAMENTO DIRETO DO MODELO .OBJ CUSTOMIZADO DA LANTERNA --- */
+        function setupFlashlight() {
+            const torchGroup = new THREE.Group();
+            
+            flashlightTarget = new THREE.Object3D();
+            flashlightTarget.position.set(0, 0, -5);
+            torchGroup.add(flashlightTarget);
+
+            flashlightSpotlight = new THREE.SpotLight(0xfffaed, 4.0, 26, Math.PI / 5, 0.3, 1);
+            flashlightSpotlight.position.set(0, 0, -0.16);
+            flashlightSpotlight.target = flashlightTarget;
+            torchGroup.add(flashlightSpotlight);
+
+            flashlightPointlight = new THREE.PointLight(0xfffaed, 0.6, 2.5);
+            flashlightPointlight.position.set(0, 0, -0.16);
+            torchGroup.add(flashlightPointlight);
+
+            // Carregamento direto sem gerar malha genérica temporária
+            const textureLoader = new THREE.TextureLoader();
+            const textureUrl = 'https://cdn.jsdelivr.net/gh/blazzblazzito-ui/S-pra-textura@main/FlashlightTexture.png';
+            const objUrl = 'https://cdn.jsdelivr.net/gh/blazzblazzito-ui/S-pra-textura@main/Flashlight.obj';
+
+            textureLoader.load(
+                textureUrl,
+                (texture) => {
+                    if (typeof THREE.OBJLoader !== 'undefined') {
+                        const loader = new THREE.OBJLoader();
+                        loader.load(
+                            objUrl,
+                            (obj) => {
+                                obj.traverse((child) => {
+                                    if (child.isMesh) {
+                                        child.material = new THREE.MeshStandardMaterial({
+                                            map: texture,
+                                            roughness: 0.5,
+                                            metalness: 0.2
+                                        });
+                                    }
+                                });
+
+                                // CORREÇÃO DE ORIENTAÇÃO: Rotaciona 180° no eixo Y para apontar para a frente
+                                obj.rotation.y = Math.PI;
+
+                                // Normaliza e dimensiona a lanterna (AUMENTADA PARA 0.38)
+                                const box = new THREE.Box3().setFromObject(obj);
+                                const size = new THREE.Vector3();
+                                box.getSize(size);
+                                const maxDim = Math.max(size.x, size.y, size.z);
+                                if (maxDim > 0) {
+                                    const scale = 0.38 / maxDim;
+                                    obj.scale.set(scale, scale, scale);
+                                }
+
+                                torchGroup.add(obj);
+                            },
+                            undefined,
+                            (err) => {
+                                console.warn('Falha ao carregar arquivo OBJ da lanterna:', err);
+                            }
+                        );
+                    }
+                },
+                undefined,
+                (err) => {
+                    console.warn('Falha ao carregar imagem de textura da lanterna:', err);
+                }
+            );
+
+torchGroup.position.set(0.28, -0.22, -0.45);
+            camera.add(torchGroup);
+            flashlightModel = torchGroup;
+        }
+
+        /* --- LÓGICA DA LANTERNA (ON/OFF) --- */
+        function toggleFlashlight() {
+            if (player.battery <= 0) return;
+            player.flashlightOn = !player.flashlightOn;
+            playClickSound();
+
+            flashlightSpotlight.visible = player.flashlightOn;
+            flashlightPointlight.visible = player.flashlightOn;
+        }
+
+        /* --- IA DA ENTIDADE --- */
+        function setupMonster() {
+            const monsterGroup = new THREE.Group();
+
+            const bodyGeo = new THREE.CylinderGeometry(0.32, 0.1, 2.7, 8);
+            const bodyMat = new THREE.MeshBasicMaterial({ color: 0x020202, wireframe: true });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.35;
+            monsterGroup.add(body);
+
+            const eyeGeo = new THREE.SphereGeometry(0.07, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.12, 2.2, -0.15);
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.12, 2.2, -0.15);
+            monsterGroup.add(leftEye, rightEye);
+
+            const redLight = new THREE.PointLight(0xff0000, 1.8, 7);
+            redLight.position.set(0, 2.0, 0);
+            monsterGroup.add(redLight);
+
+            const spawnX = (1 - GRID_SIZE / 2) * CELL_SIZE;
+            const spawnZ = (1 - GRID_SIZE / 2) * CELL_SIZE;
+
+            monsterGroup.position.set(spawnX, 0, spawnZ);
+            scene.add(monsterGroup);
+
+            monster = {
+                mesh: monsterGroup,
+                state: 'PATROL',
+                speed: 2.3,
+                chaseSpeed: 4.6,
+                targetPos: new THREE.Vector3(),
+                chaseTimer: 0
+            };
+
+            pickMonsterTarget();
+        }
+
+        function pickMonsterTarget() {
+            let rx, rz, gridR, gridC;
+            do {
+                gridR = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                gridC = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+            } while (mazeGrid[gridR][gridC] === 1);
+
+            rx = (gridR - GRID_SIZE / 2) * CELL_SIZE;
+            rz = (gridC - GRID_SIZE / 2) * CELL_SIZE;
+            monster.targetPos.set(rx, 0, rz);
+        }
+
+        function updateMonsterAI(delta) {
+            if (!monster || !isGameStarted) return;
+
+            if (Date.now() - gameStartTime < 3000) return;
+
+            const monsterPos = monster.mesh.position;
+            const distToPlayer = monsterPos.distanceTo(player.position);
+
+            const isPlayerRunning = player.isSprinting && player.velocity.length() > 0.1;
+
+            if (distToPlayer < 14 || (distToPlayer < 20 && isPlayerRunning)) {
+                monster.state = 'CHASE';
+                monster.targetPos.copy(player.position);
+                monster.chaseTimer = 5.0;
+            } else if (monster.state === 'CHASE') {
+                monster.chaseTimer -= delta;
+                if (monster.chaseTimer <= 0) {
+                    monster.state = 'PATROL';
+                    pickMonsterTarget();
+                }
+            }
+
+            const curSpeed = (monster.state === 'CHASE') ? monster.chaseSpeed : monster.speed;
+            const dir = new THREE.Vector3().subVectors(monster.targetPos, monsterPos);
+            dir.y = 0;
+
+            if (dir.length() > 0.4) {
+                dir.normalize();
+                monsterPos.addScaledVector(dir, curSpeed * delta);
+                monster.mesh.lookAt(monster.targetPos.x, monsterPos.y, monster.targetPos.z);
+            } else if (monster.state === 'PATROL') {
+                pickMonsterTarget();
+            }
+
+            const chaseOverlay = document.getElementById('chase-overlay');
+            const monsterStatus = document.getElementById('monster-status');
+
+            if (monster.state === 'CHASE' && distToPlayer < 15) {
+                chaseOverlay.style.opacity = '1';
+                monsterStatus.style.opacity = '1';
+                if (chaseSoundGain) chaseSoundGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            } else {
+                chaseOverlay.style.opacity = '0';
+                monsterStatus.style.opacity = '0';
+                if (chaseSoundGain) chaseSoundGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            }
+
+            // HITBOX DE MORTE DA CRIATURA
+            if (distToPlayer < 2.2) {
+                triggerGameOver();
+            }
+        }
+
+        /* --- SISTEMA DE ÁUDIO --- */
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            const humOsc = audioCtx.createOscillator();
+            const humGain = audioCtx.createGain();
+            humOsc.type = 'sawtooth';
+            humOsc.frequency.setValueAtTime(60, audioCtx.currentTime);
+            humGain.gain.setValueAtTime(0.012, audioCtx.currentTime);
+            humOsc.connect(humGain);
+            humGain.connect(audioCtx.destination);
+            humOsc.start();
+
+            const chaseOsc = audioCtx.createOscillator();
+            chaseSoundGain = audioCtx.createGain();
+            chaseOsc.type = 'sawtooth';
+            chaseOsc.frequency.setValueAtTime(45, audioCtx.currentTime);
+            chaseSoundGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            chaseOsc.connect(chaseSoundGain);
+            chaseSoundGain.connect(audioCtx.destination);
+            chaseOsc.start();
+        }
+
+        function playClickSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(550, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        /* --- CONTROLES MULTI-TOUCH E TECLADO --- */
+        function setupInputs() {
+            window.addEventListener('keydown', (e) => {
+                if (!isGameStarted || isPaused) return;
+                switch (e.code) {
+                    case 'KeyW': case 'ArrowUp': keys.forward = true; break;
+                    case 'KeyS': case 'ArrowDown': keys.backward = true; break;
+                    case 'KeyA': case 'ArrowLeft': keys.left = true; break;
+                    case 'KeyD': case 'ArrowRight': keys.right = true; break;
+                    case 'ShiftLeft': keys.sprint = true; break;
+                    case 'ControlLeft': case 'KeyC': keys.crouch = !keys.crouch; break;
+                    case 'Space': keys.jump = true; break;
+                    case 'KeyF': toggleFlashlight(); break;
+                    case 'KeyE': interactDoor(); break;
+                    case 'Escape': togglePauseMenu(); break;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                switch (e.code) {
+                    case 'KeyW': case 'ArrowUp': keys.forward = false; break;
+                    case 'KeyS': case 'ArrowDown': keys.backward = false; break;
+                    case 'KeyA': case 'ArrowLeft': keys.left = false; break;
+                    case 'KeyD': case 'ArrowRight': keys.right = false; break;
+                    case 'ShiftLeft': keys.sprint = false; break;
+                    case 'Space': keys.jump = false; break;
+                }
+            });
+
+            renderer.domElement.addEventListener('click', () => {
+                if (isGameStarted && !isPaused && !isTouchDevice()) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === renderer.domElement && !isPaused) {
+                    const sens = settings.sensitivity * 0.002;
+                    player.yaw -= e.movementX * sens;
+                    player.pitch -= e.movementY * sens;
+                    player.pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, player.pitch));
+                }
+            });
+
+            setupTouchControls();
+        }
+
+        function setupTouchControls() {
+            const joystickZone = document.getElementById('joystick-zone');
+            const joystickThumb = document.getElementById('joystick-thumb');
+            let joystickTouchId = null, center = { x: 0, y: 0 };
+
+            const bindTouchBtn = (elemId, onPress, onRelease) => {
+                const btn = document.getElementById(elemId);
+                if (!btn) return;
+
+                const handlePress = (e) => {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    btn.classList.add('btn-active');
+                    if (onPress) onPress();
+                };
+
+                const handleRelease = (e) => {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    btn.classList.remove('btn-active');
+                    if (onRelease) onRelease();
+                };
+
+                btn.addEventListener('touchstart', handlePress, { passive: false });
+                btn.addEventListener('touchend', handleRelease, { passive: false });
+            };
+
+            bindTouchBtn('btn-flashlight', () => { toggleFlashlight(); });
+            bindTouchBtn('btn-sprint', () => { keys.sprint = true; }, () => { keys.sprint = false; });
+            bindTouchBtn('btn-crouch', () => { keys.crouch = !keys.crouch; });
+            bindTouchBtn('btn-jump', () => { keys.jump = true; setTimeout(() => keys.jump = false, 100); });
+            bindTouchBtn('btn-interact', () => { interactDoor(); });
+
+            // Joystick Virtual
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                joystickTouchId = touch.identifier;
+                const rect = joystickZone.getBoundingClientRect();
+                center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                joystick.active = true;
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (joystick.active) {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === joystickTouchId) {
+                            const touch = e.changedTouches[i];
+                            const dx = touch.clientX - center.x;
+                            const dy = touch.clientY - center.y;
+                            const dist = Math.min(50, Math.hypot(dx, dy));
+                            const angle = Math.atan2(dy, dx);
+
+                            joystick.x = (dist / 50) * Math.cos(angle);
+                            joystick.y = (dist / 50) * Math.sin(angle);
+                            joystickThumb.style.transform = `translate(${joystick.x * 35}px, ${joystick.y * 35}px)`;
+                            break;
+                        }
+                    }
+                }
+
+                if (touchLook.active) {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const touch = e.changedTouches[i];
+                        if (touch.identifier === touchLook.id) {
+                            const dx = touch.clientX - touchLook.lastX;
+                            const dy = touch.clientY - touchLook.lastY;
+                            const sens = settings.sensitivity * 0.0035;
+                            player.yaw -= dx * sens;
+                            player.pitch -= dy * sens;
+                            player.pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, player.pitch));
+                            touchLook.lastX = touch.clientX;
+                            touchLook.lastY = touch.clientY;
+                        }
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchend', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (touch.identifier === joystickTouchId) {
+                        joystick.active = false;
+                        joystick.x = 0; joystick.y = 0;
+                        joystickThumb.style.transform = `translate(0px, 0px)`;
+                    }
+                    if (touch.identifier === touchLook.id) {
+                        touchLook.active = false;
+                        touchLook.id = null;
+                    }
+                }
+            });
+
+            window.addEventListener('touchstart', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (touch.clientX > window.innerWidth / 2 && !touchLook.active) {
+                        const isBtn = touch.target.closest('#mobile-controls button');
+                        if (!isBtn) {
+                            touchLook.active = true;
+                            touchLook.id = touch.identifier;
+                            touchLook.lastX = touch.clientX;
+                            touchLook.lastY = touch.clientY;
+                        }
+                    }
+                }
+            });
+        }
+
+        function isTouchDevice() {
+            return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        }
+
+        /* --- FÍSICA E COLISÃO EXATA DE CAIXA BBOX 3D --- */
+        let headBobTimer = 0;
+
+        function updatePlayer(delta) {
+            if (!isGameStarted || isPaused) return;
+
+            // Bateria
+            if (player.flashlightOn) {
+                player.battery = Math.max(0, player.battery - delta * 0.7);
+                if (player.battery === 0) {
+                    player.flashlightOn = false;
+                    flashlightSpotlight.visible = false;
+                    flashlightPointlight.visible = false;
+                }
+            }
+            document.getElementById('battery-bar').style.width = `${player.battery}%`;
+            document.getElementById('battery-text').innerText = `${Math.round(player.battery)}%`;
+
+            let moveX = 0, moveZ = 0;
+            if (keys.forward) moveZ -= 1;
+            if (keys.backward) moveZ += 1;
+            if (keys.left) moveX -= 1;
+            if (keys.right) moveX += 1;
+
+            if (joystick.active) {
+                moveX = joystick.x;
+                moveZ = joystick.y;
+            }
+
+            const isMoving = Math.hypot(moveX, moveZ) > 0.1;
+
+            if (keys.sprint && isMoving && !player.isCrouching && !player.isExhausted) {
+                player.isSprinting = true;
+                player.stamina = Math.max(0, player.stamina - delta * 20);
+                if (player.stamina === 0) { player.isExhausted = true; player.isSprinting = false; }
+            } else {
+                player.isSprinting = false;
+                player.stamina = Math.min(player.maxStamina, player.stamina + delta * 14);
+                if (player.stamina > 20) player.isExhausted = false;
+            }
+
+            document.getElementById('stamina-bar').style.width = `${player.stamina}%`;
+            document.getElementById('stamina-text').innerText = `${Math.round(player.stamina)}%`;
+
+            let speed = 2.6;
+            if (player.isSprinting) speed = 5.0;
+            if (keys.crouch) { speed = 1.3; player.isCrouching = true; } else { player.isCrouching = false; }
+
+            const targetHeight = player.isCrouching ? player.crouchHeight : player.height;
+            player.currentHeight += (targetHeight - player.currentHeight) * 10 * delta;
+
+            const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+            const side = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+            const moveVec = new THREE.Vector3().addScaledVector(forward, -moveZ).addScaledVector(side, moveX);
+
+            if (moveVec.length() > 1) moveVec.normalize();
+
+            player.velocity.x = moveVec.x * speed;
+            player.velocity.z = moveVec.z * speed;
+
+            if (keys.jump && player.isGrounded && !player.isCrouching) {
+                player.velocity.y = 3.6;
+                player.isGrounded = false;
+            }
+            if (!player.isGrounded) player.velocity.y -= 11 * delta;
+
+            const nextX = player.position.x + player.velocity.x * delta;
+            const nextZ = player.position.z + player.velocity.z * delta;
+
+            // SISTEMA FÍSICO DE DETECÇÃO DE CAIXA DE COLISÃO
+            if (!checkBoundingBoxCollision(nextX, player.position.z)) {
+                player.position.x = nextX;
+            }
+            if (!checkBoundingBoxCollision(player.position.x, nextZ)) {
+                player.position.z = nextZ;
+            }
+
+            player.position.y += player.velocity.y * delta;
+            if (player.position.y <= player.currentHeight) {
+                player.position.y = player.currentHeight;
+                player.velocity.y = 0;
+                player.isGrounded = true;
+            }
+
+            // Câmera e Balanço
+            camera.position.copy(player.position);
+
+            if (isMoving && player.isGrounded) {
+                const bobSpeed = player.isSprinting ? 8.0 : 4.8;
+                headBobTimer += delta * bobSpeed;
+                
+                const bobY = Math.sin(headBobTimer) * (player.isSprinting ? 0.035 : 0.018);
+                const bobX = Math.cos(headBobTimer * 0.5) * (player.isSprinting ? 0.018 : 0.009);
+                
+                camera.position.y += bobY;
+                camera.position.x += bobX;
+
+                if (flashlightModel) {
+                    flashlightModel.position.x = 0.28 + Math.cos(headBobTimer * 0.5) * 0.012;
+                    flashlightModel.position.y = -0.22 + Math.sin(headBobTimer) * 0.012;
+                }
+            }
+
+            camera.rotation.y = player.yaw;
+            camera.rotation.x = player.pitch;
+
+            checkDoorPrompt();
+        }
+
+        // ALGORITMO DE COLISÃO AABB ULTRA-PRECISO
+        function checkBoundingBoxCollision(x, z) {
+            const r = player.radius;
+            const playerBox = new THREE.Box3(
+                new THREE.Vector3(x - r, 0, z - r),
+                new THREE.Vector3(x + r, player.currentHeight, z + r)
+            );
+
+            // Testar colisão com todas as paredes registradas
+            for (let box of collisionBoxes) {
+                if (playerBox.intersectsBox(box)) return true;
+            }
+
+            // Testar colisão com portas fechadas
+            for (let door of doors) {
+                if (!door.isOpen && door.box) {
+                    if (playerBox.intersectsBox(door.box)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        /* --- ANIMAÇÃO SUAVE DE ABERTURA REALISTA DE PORTAS (0° a 90°) --- */
+        function interactDoor() {
+            for (let door of doors) {
+                if (door.position.distanceTo(player.position) < 2.8) {
+                    door.isOpen = !door.isOpen;
+                    door.targetRot = door.isOpen ? -Math.PI / 2 : 0;
+                    playClickSound();
+                    break;
+                }
+            }
+        }
+
+        function checkDoorPrompt() {
+            const prompt = document.getElementById('interaction-prompt');
+            let near = false;
+            for (let door of doors) {
+                if (door.position.distanceTo(player.position) < 2.5) { near = true; break; }
+            }
+    function updateDoors(delta) {
+            doors.forEach(door => {
+                door.currentRot += (door.targetRot - door.currentRot) * 7 * delta;
+                door.hinge.rotation.y = door.currentRot;
+            });
+        }
+
+        /* --- PAUSA E CONFIGURAÇÕES --- */
+        function togglePauseMenu() {
+            if (!isGameStarted) return;
+            isPaused = !isPaused;
+            document.getElementById('pause-menu').classList.toggle('hidden', !isPaused);
+            if (isPaused && document.pointerLockElement) document.exitPointerLock();
+        }
+
+        function setGraphicsQuality(quality) {
+            settings.quality = quality;
+            document.querySelectorAll('.gfx-btn').forEach(btn => btn.className = 'gfx-btn py-1.5 rounded border border-zinc-700 bg-zinc-900 text-gray-300');
+            event.target.className = 'gfx-btn py-1.5 rounded border border-yellow-500 bg-yellow-500/20 text-yellow-300 font-bold';
+
+            switch (quality) {
+                case 'potato': renderer.setPixelRatio(0.4); scene.fog.density = 0.12; break;
+                case 'low': renderer.setPixelRatio(0.6); scene.fog.density = 0.1; break;
+                case 'medium': renderer.setPixelRatio(0.85); scene.fog.density = 0.08; break;
+                case 'high': renderer.setPixelRatio(1.0); scene.fog.density = 0.08; break;
+                case 'ultra': renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)); scene.fog.density = 0.06; break;
+            }
+        }
+
+        function updateSensitivity(val) {
+            settings.sensitivity = parseFloat(val);
+            document.getElementById('sens-val').innerText = settings.sensitivity.toFixed(1);
+        }
+
+        function updateFOV(val) {
+            settings.fov = parseInt(val);
+            document.getElementById('fov-val').innerText = settings.fov;
+            camera.fov = settings.fov;
+            camera.updateProjectionMatrix();
+        }
+
+        function triggerGameOver() {
+            isGameStarted = false;
+            document.getElementById('game-over-menu').classList.remove('hidden');
+            if (document.pointerLockElement) document.exitPointerLock();
+        }
+
+        function startGame() {
+            initAudio();
+            document.getElementById('main-menu').classList.add('hidden');
+            isGameStarted = true;
+            gameStartTime = Date.now();
+            if (!isTouchDevice()) renderer.domElement.requestPointerLock();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Relógio VHS
+        let startTime = Date.now();
+        setInterval(() => {
+            if (!isGameStarted || isPaused) return;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const hrs = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+            const secs = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('vhs-timer').innerText = `${hrs}:${mins}:${secs}`;
+        }, 1000);
+
+        /* --- LOOP PRINCIPAL DO JOGO --- */
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            if (isGameStarted && !isPaused) {
+                updatePlayer(delta);
+                updateMonsterAI(delta);
+                updateDoors(delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => {
+            initThree();
+            setupInputs();
+            animate();
+        };
+    </script>
+</body>
+</html>
+```eof
